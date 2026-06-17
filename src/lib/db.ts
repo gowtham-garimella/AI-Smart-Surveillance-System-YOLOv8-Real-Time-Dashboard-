@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import fs from 'fs';
 import path from 'path';
+import { initKeepAlive } from './keep-alive';
 
 let pool: any = null;
 
@@ -66,7 +67,11 @@ export async function initDb() {
     const schema = fs.readFileSync(schemaPath, 'utf8');
     await p.query(schema);
     console.log("PostgreSQL database tables initialized successfully.");
+    
+    // Initialize Keep-Alive runner
+    await initKeepAlive();
   } catch (error) {
     console.error("Failed to initialize database tables:", error);
   }
 }
+

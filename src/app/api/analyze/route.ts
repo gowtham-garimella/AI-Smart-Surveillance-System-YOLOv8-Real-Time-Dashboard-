@@ -66,20 +66,54 @@ export async function POST(req: NextRequest) {
       videoName = isYoutube ? "YouTube Stream" : path.basename(sourceUrl) || "Network Camera";
       
       if (isYoutube) {
-        // Try to download using yt-dlp, otherwise throw an error
-        try {
-          console.log(`Downloading YouTube URL via yt-dlp to: ${savePath}`);
-          let ytDlpCmd = 'yt-dlp';
-          if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) {
-            ytDlpCmd = '/opt/homebrew/bin/yt-dlp';
-          } else if (fs.existsSync('/usr/local/bin/yt-dlp')) {
-            ytDlpCmd = '/usr/local/bin/yt-dlp';
+        // Try to download using yt-dlp with multiple path fallback candidates
+        let downloaded = false;
+        let lastError: any = null;
+
+        // Determine pythonCmd
+        let pythonCmd = 'python3';
+        const venvPythonPath = path.join(process.cwd(), '..', '.surveillance-venv', 'bin', 'python3');
+        if (fs.existsSync(venvPythonPath)) {
+          pythonCmd = venvPythonPath;
+        }
+
+        // List of candidate commands to run yt-dlp
+        const candidates = [];
+        if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) {
+          candidates.push('"/opt/homebrew/bin/yt-dlp"');
+        }
+        if (fs.existsSync('/usr/local/bin/yt-dlp')) {
+          candidates.push('"/usr/local/bin/yt-dlp"');
+        }
+        candidates.push('yt-dlp');
+        candidates.push(`"${pythonCmd}" -m yt_dlp`);
+        if (pythonCmd !== 'python3') {
+          candidates.push('python3 -m yt_dlp');
+        }
+
+        // Try downloading with candidates
+        for (const cmd of candidates) {
+          try {
+            console.log(`Attempting YouTube download with command: ${cmd}`);
+            // Use robust format selection: best mp4 format or best overall
+            // --extractor-args "youtube:player-client=android,web" to bypass signature/bot checks
+            // --no-playlist to prevent playlist downloads
+            // --merge-output-format mp4 to ensure standard container
+            const fullCmd = `${cmd} -f "bv*[ext=mp4]+ba[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist --extractor-args "youtube:player-client=android,web" -o "${savePath}" "${sourceUrl}"`;
+            await execPromise(fullCmd);
+            downloaded = true;
+            console.log(`YouTube download succeeded using: ${cmd}`);
+            break;
+          } catch (err: any) {
+            console.warn(`YouTube download failed with ${cmd}:`, err.message || err);
+            lastError = err;
           }
-          await execPromise(`"${ytDlpCmd}" -f mp4 -o "${savePath}" "${sourceUrl}"`);
-        } catch (ytErr) {
-          console.error("yt-dlp download failed:", ytErr);
+        }
+
+        if (!downloaded) {
+          console.error("All YouTube download candidates failed. Last error:", lastError);
           return NextResponse.json({ 
-            error: "YouTube stream download failed. Host system lacks 'yt-dlp' or network is blocked. Please upload a local video file instead." 
+            error: `YouTube stream download failed. Host system lacks 'yt-dlp' / 'ffmpeg', or YouTube is blocking the request. Error: ${lastError?.message || lastError}` 
           }, { status: 400 });
         }
       } else {

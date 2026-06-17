@@ -14,7 +14,9 @@ import {
   TrendingUp, 
   FileText,
   Activity,
-  Trash2
+  Trash2,
+  Server,
+  RefreshCw
 } from 'lucide-react';
 
 interface LogItem {
@@ -97,7 +99,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [history, setHistory] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [activeTab, setActiveTab] = useState<'monitor' | 'history'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'history' | 'settings'>('monitor');
   const router = useRouter();
 
   // Settings & Form States
@@ -115,11 +117,22 @@ export default function DashboardPage() {
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState('');
 
+  // System Settings States
+  const [renderDeployHookUrl, setRenderDeployHookUrl] = useState('');
+  const [appExternalUrl, setAppExternalUrl] = useState('');
+  const [keepAliveEnabled, setKeepAliveEnabled] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState('');
+  const [settingsError, setSettingsError] = useState('');
+  const [deploying, setDeploying] = useState(false);
+  const [deploySuccess, setDeploySuccess] = useState('');
+  const [deployError, setDeployError] = useState('');
+
   // Synchronous Playback Control Refs
   const originalVideoRef = useRef<HTMLVideoElement>(null);
   const processedVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Authenticate user & load history
+  // Authenticate user, load history & settings
   useEffect(() => {
     async function checkAuthAndLoadData() {
       try {
@@ -138,6 +151,17 @@ export default function DashboardPage() {
           setHistory(histData.history || []);
           if (histData.history && histData.history.length > 0) {
             setSelectedSession(histData.history[0]);
+          }
+        }
+
+        // Fetch system settings
+        const settingsRes = await fetch('/api/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          if (settingsData.settings) {
+            setRenderDeployHookUrl(settingsData.settings.render_deploy_hook_url || '');
+            setAppExternalUrl(settingsData.settings.app_external_url || '');
+            setKeepAliveEnabled(settingsData.settings.keep_alive_enabled === 'true');
           }
         }
       } catch (err) {
@@ -289,6 +313,59 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsLoading(true);
+    setSettingsSuccess('');
+    setSettingsError('');
+
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          renderDeployHookUrl,
+          appExternalUrl,
+          keepAliveEnabled
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save settings.");
+      }
+
+      setSettingsSuccess("Settings saved successfully.");
+    } catch (err: any) {
+      setSettingsError(err.message || "An error occurred while saving settings.");
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleTriggerDeploy = async () => {
+    setDeploying(true);
+    setDeploySuccess('');
+    setDeployError('');
+
+    try {
+      const res = await fetch('/api/settings/deploy', {
+        method: 'POST'
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to trigger deployment.");
+      }
+
+      setDeploySuccess("Deployment triggered successfully! Render is rebuilding your project.");
+    } catch (err: any) {
+      setDeployError(err.message || "An error occurred while triggering deployment.");
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   return (
     <div className="dashboard-layout">
       {/* Sidebar Navigation */}
@@ -373,6 +450,19 @@ export default function DashboardPage() {
               onClick={() => setActiveTab('history')}
             >
               Queue Stream
+            </button>
+            <button 
+              className={`auth-tab ${activeTab === 'settings' ? 'active' : ''}`}
+              style={{ width: '150px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
+              onClick={() => {
+                setActiveTab('settings');
+                setSettingsSuccess('');
+                setSettingsError('');
+                setDeploySuccess('');
+                setDeployError('');
+              }}
+            >
+              <Settings size={14} /> System Settings
             </button>
           </div>
         </header>
@@ -753,8 +843,136 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {!loading && activeTab === 'settings' && (
+          <div className="workspace-grid animate-fade-in" style={{ gridTemplateColumns: '1fr' }}>
+            <div className="panel-card glass" style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <Server size={22} color="#00ff66" />
+                <h3 className="panel-title" style={{ margin: 0 }}>System & Deploy Management</h3>
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '0.92rem', marginBottom: '24px', lineHeight: '1.6' }}>
+                Configure webhook parameters to redeploy this dashboard directly from Render, and manage cold-start keep-alive configuration to prevent container idle suspension.
+              </p>
+
+              {settingsSuccess && <div className="terminal-line" style={{ color: '#00ff66', background: 'rgba(0, 255, 102, 0.05)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(0,255,102,0.2)', marginBottom: '20px' }}>✓ {settingsSuccess}</div>}
+              {settingsError && <div className="auth-error" style={{ marginBottom: '20px' }}>{settingsError}</div>}
+
+              <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Deployment Webhook Card */}
+                <div style={{ border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '20px', background: 'rgba(0, 0, 0, 0.15)' }}>
+                  <h4 style={{ fontSize: '1rem', color: '#f8fafc', marginBottom: '6px', fontWeight: 600 }}>Render Deploy Webhook</h4>
+                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '16px' }}>
+                    Trigger code rebuild and container deployment directly from this interface.
+                  </p>
+                  
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Render Deploy Hook URL</label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="https://api.render.com/deploy/srv-xxx?key=yyy"
+                      value={renderDeployHookUrl}
+                      onChange={(e) => setRenderDeployHookUrl(e.target.value)}
+                    />
+                    <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '6px' }}>
+                      Tip: Find this in your Render Dashboard under service <b>Settings</b> → <b>Deploy Hook</b>.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keep Alive / Cold Start Card */}
+                <div style={{ border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '20px', background: 'rgba(0, 0, 0, 0.15)' }}>
+                  <h4 style={{ fontSize: '1rem', color: '#f8fafc', marginBottom: '6px', fontWeight: 600 }}>Container Keep-Alive (Cold-Start Resiliency)</h4>
+                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '16px' }}>
+                    Render Free tier containers go to sleep after 15 minutes of inactivity. Enter your public URL to enable periodic self-ping requests to prevent spin-down.
+                  </p>
+
+                  <div className="form-group" style={{ marginBottom: '20px' }}>
+                    <label className="form-label">External App URL</label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="https://ai-surveillance-system.onrender.com"
+                      value={appExternalUrl}
+                      onChange={(e) => setAppExternalUrl(e.target.value)}
+                    />
+                  </div>
+
+                  <label 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px', 
+                      cursor: 'pointer', 
+                      fontSize: '0.95rem', 
+                      color: keepAliveEnabled ? '#00ff66' : '#cbd5e1',
+                      fontWeight: 600,
+                      userSelect: 'none'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={keepAliveEnabled}
+                      style={{ accentColor: '#00ff66', width: 18, height: 18, cursor: 'pointer' }}
+                      onChange={(e) => setKeepAliveEnabled(e.target.checked)}
+                    />
+                    <span>Enable Background Self-Ping (Every 10 mins)</span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <button 
+                    type="submit" 
+                    className="btn-primary" 
+                    style={{ flex: 1 }}
+                    disabled={settingsLoading}
+                  >
+                    {settingsLoading ? "Saving Configurations..." : "Save System Settings"}
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    style={{ 
+                      flex: 1, 
+                      background: 'rgba(0, 255, 102, 0.1)', 
+                      border: '1px solid rgba(0, 255, 102, 0.25)', 
+                      color: '#00ff66',
+                      boxShadow: 'none'
+                    }}
+                    onClick={handleTriggerDeploy}
+                    disabled={deploying}
+                  >
+                    {deploying ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                        <span className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(0,255,102,0.2)', borderTopColor: '#00ff66' }}></span>
+                        Triggering...
+                      </span>
+                    ) : (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                        <RefreshCw size={14} /> Trigger Render Deployment
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {deploySuccess && (
+                <div className="terminal-line" style={{ color: '#00ff66', background: 'rgba(0, 255, 102, 0.05)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(0,255,102,0.3)', marginTop: '24px' }}>
+                  ✓ {deploySuccess}
+                </div>
+              )}
+              {deployError && (
+                <div className="auth-error" style={{ marginTop: '24px' }}>
+                  ❌ {deployError}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Zero-state welcomer screen when database has no records */}
-        {!loading && history.length === 0 && (
+        {!loading && activeTab !== 'settings' && history.length === 0 && (
           <div className="panel-card glass animate-fade-in" style={{ padding: '60px 40px', textAlign: 'center' }}>
             <Shield size={64} color="#00ff66" style={{ margin: '0 auto 20px auto', filter: 'drop-shadow(0 0 15px rgba(0, 255, 102, 0.3))' }} />
             <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Security Monitor Base Online</h2>
