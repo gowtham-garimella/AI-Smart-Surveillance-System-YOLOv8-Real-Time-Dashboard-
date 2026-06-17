@@ -183,22 +183,46 @@ export async function POST(req: NextRequest) {
             candidates.push('python3 -m yt_dlp');
           }
 
-          for (const cmd of candidates) {
+          // Build a robust candidates array of different download utilities with headers
+          const downloadCmds: string[] = [];
+          // A. curl with Chrome user-agent & google referer (Standard on Linux containers)
+          downloadCmds.push(`curl -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" -H "Referer: https://www.google.com/" -L -k -o "${savePath}" "${sourceUrl}"`);
+          
+          // B. yt-dlp candidates with user-agent & referer
+          candidates.forEach(cmd => {
+            downloadCmds.push(`${cmd} --no-playlist --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --referer "https://www.google.com/" --no-check-certificates -o "${savePath}" "${sourceUrl}"`);
+          });
+
+          // C. wget fallback
+          downloadCmds.push(`wget -U "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --referer="https://www.google.com/" --no-check-certificate -O "${savePath}" "${sourceUrl}"`);
+
+          for (const fullCmd of downloadCmds) {
             try {
-              console.log(`Attempting direct link download with yt-dlp via: ${cmd}`);
-              const fullCmd = `${cmd} --no-playlist -o "${savePath}" "${sourceUrl}"`;
+              // Extract the utility name for logging (e.g. curl, yt-dlp)
+              const utilityName = fullCmd.split(' ')[0] || 'downloader';
+              console.log(`Attempting direct link download via: ${utilityName}`);
               await execPromise(fullCmd);
-              downloaded = true;
-              console.log(`Direct link download succeeded via yt-dlp: ${cmd}`);
-              break;
+              
+              // Verify file was actually downloaded and is not empty
+              if (fs.existsSync(savePath) && fs.statSync(savePath).size > 1000) {
+                downloaded = true;
+                console.log(`Direct link download succeeded via: ${utilityName}`);
+                break;
+              } else {
+                throw new Error("Downloaded file is empty or missing.");
+              }
             } catch (err: any) {
-              console.warn(`Direct link download failed with ${cmd}:`, err.message || err);
+              console.warn(`Direct link download utility failed:`, err.message || err);
               lastError = err;
+              // Clean up if a partial/empty file was created
+              if (fs.existsSync(savePath)) {
+                try { fs.unlinkSync(savePath); } catch {}
+              }
             }
           }
 
           if (!downloaded) {
-            console.error("Direct video link download failed with both fetch and yt-dlp. Last error:", lastError);
+            console.error("Direct video link download failed with both fetch and CLI fallbacks. Last error:", lastError);
             return NextResponse.json({ 
               error: `Direct link download failed (${fetchErr.message}). The host server may have blocked the request (e.g. Cloudflare 403). Please upload a local video file instead.` 
             }, { status: 400 });
