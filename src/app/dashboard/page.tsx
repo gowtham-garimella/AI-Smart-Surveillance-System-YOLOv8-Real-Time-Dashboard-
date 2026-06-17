@@ -470,7 +470,38 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {error && <div className="auth-error">{error}</div>}
+        {error && (
+          <div className="auth-error" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>{error}</div>
+            
+            {error.includes("Sign in to confirm you’re not a bot") && (
+              <div style={{ 
+                marginTop: '8px', 
+                padding: '16px', 
+                background: 'rgba(255, 204, 0, 0.08)', 
+                border: '1px solid rgba(255, 204, 0, 0.25)', 
+                borderRadius: '8px',
+                color: '#ffcc00',
+                fontSize: '0.85rem',
+                lineHeight: '1.5'
+              }}>
+                <h5 style={{ fontWeight: 700, marginBottom: '6px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  💡 Security Bypass Required (YouTube Bot Protection Active)
+                </h5>
+                <p style={{ marginBottom: '8px' }}>
+                  Render's hosting servers are being challenged by YouTube's bot-detection system. Follow these quick steps to authorize downloads:
+                </p>
+                <ol style={{ marginLeft: '18px', paddingLeft: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <li>Install a cookie manager extension like <b>Cookie-Editor</b> or <b>Get cookies.txt LOCALLY</b> on Chrome/Firefox.</li>
+                  <li>Log in to <b>YouTube.com</b> on your browser.</li>
+                  <li>Open the extension, click <b>Export</b> and select <b>Netscape</b> format to copy the cookies to your clipboard.</li>
+                  <li>Go to the <b>System Settings</b> tab at the top-right of this dashboard.</li>
+                  <li>Paste the copied cookies into the <b>YouTube Authentication Cookies</b> box and click <b>Save</b>.</li>
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Step Loader Overlay */}
         {loading && (
