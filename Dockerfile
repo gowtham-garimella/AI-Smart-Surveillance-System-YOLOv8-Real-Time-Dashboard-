@@ -15,7 +15,9 @@ COPY package*.json ./
 RUN npm ci
 
 # Install Python machine learning dependencies (YOLOv8, OpenCV, and Pandas)
-RUN pip install --no-cache-dir ultralytics opencv-python pandas yt-dlp
+# Force cache bust to install latest yt-dlp decryption signatures (updated 2026-06-17)
+RUN pip install --no-cache-dir ultralytics opencv-python pandas && \
+    pip install --no-cache-dir --upgrade yt-dlp
 
 # Copy all project source code
 COPY . .
