@@ -159,10 +159,50 @@ export async function POST(req: NextRequest) {
           const buffer = Buffer.from(await res.arrayBuffer());
           fs.writeFileSync(savePath, buffer);
         } catch (fetchErr: any) {
-          console.error("Direct video link download failed:", fetchErr);
-          return NextResponse.json({ 
-            error: `Direct link download failed (${fetchErr.message}). The host server may have blocked the request (e.g. Cloudflare 403). Please upload a local video file instead.` 
-          }, { status: 400 });
+          console.warn("Direct video link fetch failed, falling back to yt-dlp downloader:", fetchErr.message || fetchErr);
+          
+          let downloaded = false;
+          let lastError: any = null;
+          
+          let pythonCmd = 'python3';
+          const venvPythonPath = path.join(process.cwd(), '..', '.surveillance-venv', 'bin', 'python3');
+          if (fs.existsSync(venvPythonPath)) {
+            pythonCmd = venvPythonPath;
+          }
+
+          const candidates = [];
+          if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) {
+            candidates.push('"/opt/homebrew/bin/yt-dlp"');
+          }
+          if (fs.existsSync('/usr/local/bin/yt-dlp')) {
+            candidates.push('"/usr/local/bin/yt-dlp"');
+          }
+          candidates.push('yt-dlp');
+          candidates.push(`"${pythonCmd}" -m yt_dlp`);
+          if (pythonCmd !== 'python3') {
+            candidates.push('python3 -m yt_dlp');
+          }
+
+          for (const cmd of candidates) {
+            try {
+              console.log(`Attempting direct link download with yt-dlp via: ${cmd}`);
+              const fullCmd = `${cmd} --no-playlist -o "${savePath}" "${sourceUrl}"`;
+              await execPromise(fullCmd);
+              downloaded = true;
+              console.log(`Direct link download succeeded via yt-dlp: ${cmd}`);
+              break;
+            } catch (err: any) {
+              console.warn(`Direct link download failed with ${cmd}:`, err.message || err);
+              lastError = err;
+            }
+          }
+
+          if (!downloaded) {
+            console.error("Direct video link download failed with both fetch and yt-dlp. Last error:", lastError);
+            return NextResponse.json({ 
+              error: `Direct link download failed (${fetchErr.message}). The host server may have blocked the request (e.g. Cloudflare 403). Please upload a local video file instead.` 
+            }, { status: 400 });
+          }
         }
       }
       originalVideoPathLocal = `/uploads/original/${uniqueName}`;
