@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     settings['render_deploy_hook_url'] = '';
     settings['app_external_url'] = '';
     settings['keep_alive_enabled'] = 'false';
+    settings['youtube_cookies'] = '';
 
     dbResult.rows.forEach((row: any) => {
       settings[row.key] = row.value;
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Parse payload
     const body = await req.json();
-    const { renderDeployHookUrl, appExternalUrl, keepAliveEnabled } = body;
+    const { renderDeployHookUrl, appExternalUrl, keepAliveEnabled, youtubeCookies } = body;
 
     // 3. Initialize DB
     await initDb();
@@ -91,6 +92,11 @@ export async function POST(req: NextRequest) {
       } else {
         stopKeepAlive();
       }
+    }
+
+    // Save YouTube Cookies
+    if (typeof youtubeCookies === 'string') {
+      await pool.query(upsertQuery, ['youtube_cookies', youtubeCookies]);
     }
 
     return NextResponse.json({ success: true, message: "System settings updated successfully." });

@@ -70,43 +70,71 @@ export async function POST(req: NextRequest) {
         let downloaded = false;
         let lastError: any = null;
 
-        // Determine pythonCmd
-        let pythonCmd = 'python3';
-        const venvPythonPath = path.join(process.cwd(), '..', '.surveillance-venv', 'bin', 'python3');
-        if (fs.existsSync(venvPythonPath)) {
-          pythonCmd = venvPythonPath;
+        // Check if there are YouTube cookies stored in the database
+        let cookiesPath = '';
+        const pool = getPool();
+        try {
+          const dbResult = await pool.query("SELECT value FROM system_settings WHERE key = 'youtube_cookies'");
+          const youtubeCookies = dbResult.rows[0]?.value;
+          if (youtubeCookies && youtubeCookies.trim() !== '') {
+            cookiesPath = path.join(uploadDirOriginal, `${Date.now()}_cookies.txt`);
+            fs.writeFileSync(cookiesPath, youtubeCookies.trim());
+            console.log(`[Analyze] Saved YouTube cookies file to: ${cookiesPath}`);
+          }
+        } catch (cookieDbErr) {
+          console.warn("Could not query youtube_cookies from database:", cookieDbErr);
         }
 
-        // List of candidate commands to run yt-dlp
-        const candidates = [];
-        if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) {
-          candidates.push('"/opt/homebrew/bin/yt-dlp"');
-        }
-        if (fs.existsSync('/usr/local/bin/yt-dlp')) {
-          candidates.push('"/usr/local/bin/yt-dlp"');
-        }
-        candidates.push('yt-dlp');
-        candidates.push(`"${pythonCmd}" -m yt_dlp`);
-        if (pythonCmd !== 'python3') {
-          candidates.push('python3 -m yt_dlp');
-        }
+        try {
+          // Determine pythonCmd
+          let pythonCmd = 'python3';
+          const venvPythonPath = path.join(process.cwd(), '..', '.surveillance-venv', 'bin', 'python3');
+          if (fs.existsSync(venvPythonPath)) {
+            pythonCmd = venvPythonPath;
+          }
 
-        // Try downloading with candidates
-        for (const cmd of candidates) {
-          try {
-            console.log(`Attempting YouTube download with command: ${cmd}`);
-            // Use robust format selection: best mp4 format or best overall
-            // --extractor-args "youtube:player-client=android,web" to bypass signature/bot checks
-            // --no-playlist to prevent playlist downloads
-            // --merge-output-format mp4 to ensure standard container
-            const fullCmd = `${cmd} -f "bv*[ext=mp4]+ba[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist --extractor-args "youtube:player-client=android,web" -o "${savePath}" "${sourceUrl}"`;
-            await execPromise(fullCmd);
-            downloaded = true;
-            console.log(`YouTube download succeeded using: ${cmd}`);
-            break;
-          } catch (err: any) {
-            console.warn(`YouTube download failed with ${cmd}:`, err.message || err);
-            lastError = err;
+          // List of candidate commands to run yt-dlp
+          const candidates = [];
+          if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) {
+            candidates.push('"/opt/homebrew/bin/yt-dlp"');
+          }
+          if (fs.existsSync('/usr/local/bin/yt-dlp')) {
+            candidates.push('"/usr/local/bin/yt-dlp"');
+          }
+          candidates.push('yt-dlp');
+          candidates.push(`"${pythonCmd}" -m yt_dlp`);
+          if (pythonCmd !== 'python3') {
+            candidates.push('python3 -m yt_dlp');
+          }
+
+          // Try downloading with candidates
+          for (const cmd of candidates) {
+            try {
+              console.log(`Attempting YouTube download with command: ${cmd}`);
+              // Use robust format selection: best mp4 format or best overall
+              // --extractor-args "youtube:player-client=ios,android" to bypass signature/bot checks
+              // --no-playlist to prevent playlist downloads
+              // --merge-output-format mp4 to ensure standard container
+              const cookiesArg = cookiesPath ? `--cookies "${cookiesPath}"` : '';
+              const fullCmd = `${cmd} -f "bv*[ext=mp4]+ba[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist --extractor-args "youtube:player-client=ios,android" ${cookiesArg} -o "${savePath}" "${sourceUrl}"`;
+              await execPromise(fullCmd);
+              downloaded = true;
+              console.log(`YouTube download succeeded using: ${cmd}`);
+              break;
+            } catch (err: any) {
+              console.warn(`YouTube download failed with ${cmd}:`, err.message || err);
+              lastError = err;
+            }
+          }
+        } finally {
+          // Clean up temporary cookies file if it was created
+          if (cookiesPath && fs.existsSync(cookiesPath)) {
+            try {
+              fs.unlinkSync(cookiesPath);
+              console.log(`[Analyze] Cleaned up temporary cookies file.`);
+            } catch (unlinkErr) {
+              console.error("Failed to delete cookies file:", unlinkErr);
+            }
           }
         }
 

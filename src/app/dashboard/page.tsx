@@ -121,6 +121,7 @@ export default function DashboardPage() {
   const [renderDeployHookUrl, setRenderDeployHookUrl] = useState('');
   const [appExternalUrl, setAppExternalUrl] = useState('');
   const [keepAliveEnabled, setKeepAliveEnabled] = useState(false);
+  const [youtubeCookies, setYoutubeCookies] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsError, setSettingsError] = useState('');
@@ -162,6 +163,7 @@ export default function DashboardPage() {
             setRenderDeployHookUrl(settingsData.settings.render_deploy_hook_url || '');
             setAppExternalUrl(settingsData.settings.app_external_url || '');
             setKeepAliveEnabled(settingsData.settings.keep_alive_enabled === 'true');
+            setYoutubeCookies(settingsData.settings.youtube_cookies || '');
           }
         }
       } catch (err) {
@@ -326,7 +328,8 @@ export default function DashboardPage() {
         body: JSON.stringify({
           renderDeployHookUrl,
           appExternalUrl,
-          keepAliveEnabled
+          keepAliveEnabled,
+          youtubeCookies
         })
       });
 
@@ -918,6 +921,28 @@ export default function DashboardPage() {
                     />
                     <span>Enable Background Self-Ping (Every 10 mins)</span>
                   </label>
+                </div>
+
+                {/* YouTube Cookies Card */}
+                <div style={{ border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '20px', background: 'rgba(0, 0, 0, 0.15)' }}>
+                  <h4 style={{ fontSize: '1rem', color: '#f8fafc', marginBottom: '6px', fontWeight: 600 }}>YouTube Authentication Cookies</h4>
+                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '16px' }}>
+                    If downloading YouTube links fails with "Sign in to confirm you're not a bot", paste your Netscape format cookie credentials here to bypass bot verification checks.
+                  </p>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Netscape Cookie Content</label>
+                    <textarea
+                      className="form-input"
+                      style={{ minHeight: '120px', fontFamily: 'monospace', fontSize: '0.8rem', resize: 'vertical' }}
+                      placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;1740000000&#9;__Secure-3PSID&#9;xxx..."
+                      value={youtubeCookies}
+                      onChange={(e) => setYoutubeCookies(e.target.value)}
+                    />
+                    <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '6px' }}>
+                      Tip: Use a browser extension like <b>Get cookies.txt LOCALLY</b> on Chrome or Firefox, copy the YouTube cookies, and paste them here.
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '16px' }}>
