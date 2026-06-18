@@ -52,8 +52,36 @@ export async function POST(req: NextRequest) {
       const uniqueName = `${Date.now()}_${fileBase}${fileExt}`;
       
       const buffer = Buffer.from(await videoFile.arrayBuffer());
+      const tempSavePath = path.join(uploadDirOriginal, `temp_${uniqueName}`);
       const savePath = path.join(uploadDirOriginal, uniqueName);
-      fs.writeFileSync(savePath, buffer);
+      
+      fs.writeFileSync(tempSavePath, buffer);
+      
+      // Re-encode original video using ffmpeg to ensure absolute HTML5 browser playback compatibility
+      const isOriginalImage = videoName.toLowerCase().endsWith('.png') || 
+                              videoName.toLowerCase().endsWith('.jpg') || 
+                              videoName.toLowerCase().endsWith('.jpeg') || 
+                              videoName.toLowerCase().endsWith('.webp') ||
+                              videoName.toLowerCase().endsWith('.bmp');
+      if (isOriginalImage) {
+        fs.renameSync(tempSavePath, savePath);
+      } else {
+        try {
+          console.log(`Re-encoding original video for web compatibility: ${tempSavePath}`);
+          // Re-encode to standard browser-playable H.264
+          const ffmpegCmd = `ffmpeg -y -i "${tempSavePath}" -vcodec libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -an -movflags +faststart "${savePath}"`;
+          await execPromise(ffmpegCmd, { timeout: 15000 });
+          if (fs.existsSync(tempSavePath)) fs.unlinkSync(tempSavePath);
+        } catch (ffErr) {
+          console.warn("Failed to re-encode original video using ffmpeg, falling back to raw upload:", ffErr);
+          if (fs.existsSync(tempSavePath)) {
+            if (fs.existsSync(savePath)) {
+              try { fs.unlinkSync(savePath); } catch {}
+            }
+            fs.renameSync(tempSavePath, savePath);
+          }
+        }
+      }
       
       originalVideoPathLocal = `/uploads/original/${uniqueName}`;
     } else if (videoUrl && videoUrl.trim() !== '') {
