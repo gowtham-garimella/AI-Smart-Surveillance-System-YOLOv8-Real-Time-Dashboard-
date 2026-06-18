@@ -265,6 +265,41 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
         cap.release()
         out.release()
         
+        # Optimize output video for web streaming using ffmpeg if available
+        import subprocess
+        temp_output = output_path + ".temp.mp4"
+        if os.path.exists(output_path):
+            try:
+                # Rename the OpenCV output to temp
+                os.rename(output_path, temp_output)
+                
+                # Re-encode to highly compatible web-ready H.264 format
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y", "-i", temp_output,
+                    "-vcodec", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-profile:v", "baseline", "-level", "3.0",
+                    "-an",
+                    "-movflags", "+faststart",
+                    "-crf", "28",
+                    output_path
+                ]
+                
+                # Run conversion silently
+                subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                
+                # Remove temp file
+                if os.path.exists(temp_output):
+                    os.remove(temp_output)
+            except Exception as e:
+                print(f"[FFmpeg Warning] Web optimization failed: {e}", file=sys.stderr)
+                # Rollback temp output if needed
+                if os.path.exists(temp_output):
+                    if os.path.exists(output_path):
+                        try: os.remove(output_path)
+                        except: pass
+                    os.rename(temp_output, output_path)
+        
         output_data = {
             "status": "success",
             "object_counts": counts,
