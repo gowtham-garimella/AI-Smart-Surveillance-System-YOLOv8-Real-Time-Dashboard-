@@ -144,7 +144,9 @@ export async function POST(req: NextRequest) {
               // --no-playlist to prevent playlist downloads
               // --merge-output-format mp4 to ensure standard container
               const cookiesArg = cookiesPath ? `--cookies "${cookiesPath}"` : '';
-              const fullCmd = `${cmd} -f "bv*[ext=mp4]+ba[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist --extractor-args "youtube:player-client=android_vr,ios,android" ${cookiesArg} -o "${savePath}" "${sourceUrl}"`;
+              const extractorArgs = cookiesPath ? '' : '--extractor-args "youtube:player-client=android_vr,ios,android"';
+              const formatSelection = 'bv*[ext=mp4]+ba[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best';
+              const fullCmd = `${cmd} -f "${formatSelection}" --merge-output-format mp4 --no-playlist ${extractorArgs} ${cookiesArg} -o "${savePath}" "${sourceUrl}"`;
               await execPromise(fullCmd);
               downloaded = true;
               console.log(`YouTube download succeeded using: ${cmd}`);
