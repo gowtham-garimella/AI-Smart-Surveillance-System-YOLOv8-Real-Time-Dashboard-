@@ -25,34 +25,12 @@ COCO_CLASSES = [
 def run_simulation(input_path, output_path, conf_threshold, alert_classes, is_image):
     print("WARNING: YOLOv8 dependencies missing. Running in simulated surveillance mode.", file=sys.stderr)
     
-    # Copy or re-encode file so a valid web-compatible file exists
+    # Copy file so a valid file exists
     if os.path.exists(input_path):
-        if is_image:
-            try:
-                shutil.copyfile(input_path, output_path)
-            except Exception as e:
-                print(f"Error copying image file: {e}", file=sys.stderr)
-        else:
-            import subprocess
-            try:
-                # Re-encode to highly compatible web-ready H.264 format
-                ffmpeg_cmd = [
-                    "ffmpeg", "-y", "-i", input_path,
-                    "-vcodec", "libx264",
-                    "-pix_fmt", "yuv420p",
-                    "-profile:v", "baseline", "-level", "3.0",
-                    "-an",
-                    "-movflags", "+faststart",
-                    "-crf", "28",
-                    output_path
-                ]
-                subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            except Exception as e:
-                print(f"FFmpeg simulation re-encode failed, falling back to copy: {e}", file=sys.stderr)
-                try:
-                    shutil.copyfile(input_path, output_path)
-                except Exception as copy_err:
-                    print(f"Error copying file: {copy_err}", file=sys.stderr)
+        try:
+            shutil.copyfile(input_path, output_path)
+        except Exception as e:
+            print(f"Error copying file: {e}", file=sys.stderr)
     else:
         # Create a tiny dummy placeholder file
         with open(output_path, "wb") as f:
