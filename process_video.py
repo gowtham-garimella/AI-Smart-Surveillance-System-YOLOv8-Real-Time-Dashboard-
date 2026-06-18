@@ -174,9 +174,26 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
             run_simulation(input_path, output_path, conf_threshold, alert_classes, is_image)
             return
             
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
+        orig_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
+        orig_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
         fps = cap.get(cv2.CAP_PROP_FPS) or 20.0
+        
+        # Downscale large videos to speed up processing and video encoding
+        MAX_DIMENSION = 640
+        if orig_width > MAX_DIMENSION or orig_height > MAX_DIMENSION:
+            if orig_width > orig_height:
+                new_width = MAX_DIMENSION
+                new_height = int(orig_height * (MAX_DIMENSION / orig_width))
+            else:
+                new_height = MAX_DIMENSION
+                new_width = int(orig_width * (MAX_DIMENSION / orig_height))
+            # Dimensions must be even for standard video codecs (like avc1/H.264)
+            width = (new_width // 2) * 2
+            height = (new_height // 2) * 2
+            print(f"[Performance Guide] Resizing video stream from {orig_width}x{orig_height} to {width}x{height} for fast CPU processing", file=sys.stderr)
+        else:
+            width = orig_width
+            height = orig_height
         
         fourcc = cv2.VideoWriter_fourcc(*'avc1')
         out = cv2.VideoWriter(output_path, fourcc, fps / frame_skip, (width, height))
@@ -195,6 +212,10 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
             frame_count += 1
             if frame_count % frame_skip != 0:
                 continue
+                
+            # Resize frame if downscaling is enabled
+            if frame.shape[1] != width or frame.shape[0] != height:
+                frame = cv2.resize(frame, (width, height))
                 
             results = model(frame, verbose=False)[0]
             

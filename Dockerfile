@@ -21,6 +21,16 @@ RUN npm ci
 RUN pip install --no-cache-dir ultralytics opencv-python pandas && \
     pip install --no-cache-dir --upgrade yt-dlp
 
+# Pre-download the YOLOv8n model weights so they are built-in and do not cause runtime download hangs
+RUN python3 -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
+# Set PyTorch thread limits to prevent CPU thread deadlocks / OOM crashes on Render (512MB RAM)
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV VECLIB_MAXIMUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+
 # Copy all project source code
 COPY . .
 
