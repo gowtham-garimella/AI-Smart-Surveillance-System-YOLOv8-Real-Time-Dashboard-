@@ -269,12 +269,28 @@ export async function POST(req: NextRequest) {
       if (stderr) {
         console.warn("Python execution warning/stderr:", stderr);
       }
+      
+      // Robust JSON search from bottom of stdout lines
       const lines = stdout.trim().split('\n');
-      const lastLine = lines[lines.length - 1];
-      pythonOutput = JSON.parse(lastLine);
+      let jsonLine = '';
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (line.startsWith('{') && line.endsWith('}')) {
+          jsonLine = line;
+          break;
+        }
+      }
+      
+      if (!jsonLine) {
+        throw new Error(`Python script did not return a valid JSON block. Raw output: ${stdout}`);
+      }
+      
+      pythonOutput = JSON.parse(jsonLine);
     } catch (cmdErr: any) {
-      console.error("Failed to execute process_video.py script:", cmdErr);
-      return NextResponse.json({ error: "Video processing failed. Verify local environment python config." }, { status: 500 });
+      console.error("Failed to execute process_video.py script or parse JSON:", cmdErr);
+      return NextResponse.json({ 
+        error: `Video processing failed: ${cmdErr.message || cmdErr}`
+      }, { status: 500 });
     }
 
     // 6. Generate AI Video Explanation Report

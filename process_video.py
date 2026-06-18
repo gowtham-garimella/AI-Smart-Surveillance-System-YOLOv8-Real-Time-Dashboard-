@@ -101,6 +101,13 @@ def main():
     # Check if the input file is an image (static capture scan)
     is_image = args.input.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp'))
     
+    # Check if force simulation is enabled via environment variable
+    force_sim = os.environ.get("FORCE_SIMULATION", "false").lower() == "true"
+    
+    if force_sim:
+        run_simulation(args.input, args.output, args.conf, alert_classes, is_image)
+        return
+        
     try:
         import cv2
         import pandas as pd
