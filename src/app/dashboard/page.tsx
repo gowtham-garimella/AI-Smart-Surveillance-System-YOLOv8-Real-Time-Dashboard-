@@ -117,6 +117,10 @@ export default function DashboardPage() {
   const [loadingStep, setLoadingStep] = useState('');
   const [error, setError] = useState('');
 
+  // Video playback / file load error status trackers
+  const [originalError, setOriginalError] = useState(false);
+  const [processedError, setProcessedError] = useState(false);
+
   // System Settings States
   const [renderDeployHookUrl, setRenderDeployHookUrl] = useState('');
   const [appExternalUrl, setAppExternalUrl] = useState('');
@@ -173,6 +177,12 @@ export default function DashboardPage() {
     }
     checkAuthAndLoadData();
   }, [router]);
+
+  // Reset video player load error states when shifting feed selections
+  useEffect(() => {
+    setOriginalError(false);
+    setProcessedError(false);
+  }, [selectedSession]);
 
   const handleLogout = async () => {
     try {
@@ -757,12 +767,24 @@ export default function DashboardPage() {
                 <div>
                   <div className="feed-title">{isImageSession(selectedSession) ? "Capture Scan (Original Image)" : "Raw Stream (Original Input)"}</div>
                   <div className="video-wrapper">
-                    {isImageSession(selectedSession) ? (
+                    {originalError ? (
+                      <div className="video-error-overlay">
+                        <AlertTriangle size={32} color="#ffcc00" style={{ filter: 'drop-shadow(0 0 8px rgba(255, 204, 0, 0.4))' }} />
+                        <h4 style={{ color: '#ffcc00', marginTop: '12px', fontWeight: 700, fontSize: '0.92rem' }}>FEED SIGNAL LOST</h4>
+                        <p style={{ fontSize: '0.76rem', color: '#cbd5e1', textAlign: 'center', marginTop: '6px', lineHeight: '1.4' }}>
+                          Video/image file is no longer available on the server.
+                        </p>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '6px', padding: '6px 10px', marginTop: '12px', fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center' }}>
+                          💡 <b>Note:</b> Deployed servers clear temp upload files on redeployments/restarts. Logs and AI reports below are preserved.
+                        </div>
+                      </div>
+                    ) : isImageSession(selectedSession) ? (
                       <img 
                         className="video-element" 
                         src={selectedSession.originalVideoPath} 
                         style={{ objectFit: 'contain' }}
                         alt="Original scan"
+                        onError={() => setOriginalError(true)}
                       />
                     ) : (
                       <video 
@@ -773,6 +795,7 @@ export default function DashboardPage() {
                         onSeeked={handleSeek}
                         onPlay={handlePlay}
                         onPause={handlePause}
+                        onError={() => setOriginalError(true)}
                       />
                     )}
                   </div>
@@ -782,12 +805,24 @@ export default function DashboardPage() {
                 <div>
                   <div className="feed-title" style={{ color: '#00ff66' }}>AI Vision Grid (YOLOv8 Bounding Boxes)</div>
                   <div className="video-wrapper video-scanner-overlay">
-                    {isImageSession(selectedSession) ? (
+                    {processedError ? (
+                      <div className="video-error-overlay" style={{ borderStyle: 'solid' }}>
+                        <AlertTriangle size={32} color="#ffcc00" style={{ filter: 'drop-shadow(0 0 8px rgba(255, 204, 0, 0.4))' }} />
+                        <h4 style={{ color: '#ffcc00', marginTop: '12px', fontWeight: 700, fontSize: '0.92rem' }}>ANALYSIS LAYER ERROR</h4>
+                        <p style={{ fontSize: '0.76rem', color: '#cbd5e1', textAlign: 'center', marginTop: '6px', lineHeight: '1.4' }}>
+                          Analyzed sequence file is missing.
+                        </p>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '6px', padding: '6px 10px', marginTop: '12px', fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center' }}>
+                          💡 <b>Note:</b> Deployed servers clear temp upload files on redeployments/restarts. Logs and AI reports below are preserved.
+                        </div>
+                      </div>
+                    ) : isImageSession(selectedSession) ? (
                       <img 
                         className="video-element" 
                         src={selectedSession.processedVideoPath} 
                         style={{ objectFit: 'contain' }}
                         alt="AI analyzed scan"
+                        onError={() => setProcessedError(true)}
                       />
                     ) : (
                       <video 
@@ -798,6 +833,7 @@ export default function DashboardPage() {
                         onSeeked={handleSeek}
                         onPlay={handlePlay}
                         onPause={handlePause}
+                        onError={() => setProcessedError(true)}
                       />
                     )}
                   </div>

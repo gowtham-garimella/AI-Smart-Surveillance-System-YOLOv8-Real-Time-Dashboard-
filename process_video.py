@@ -202,8 +202,11 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
             width = orig_width
             height = orig_height
         
-        fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        out = cv2.VideoWriter(output_path, fourcc, fps / frame_skip, (width, height))
+        # Use 'mp4v' for OpenCV VideoWriter as 'avc1' / H.264 is often unsupported in Linux cv2 prebuilt wheels.
+        # We will write to a temp raw file first, then transcode it using ffmpeg to standard browser-playable H.264.
+        temp_raw_path = output_path + ".raw.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(temp_raw_path, fourcc, fps / frame_skip, (width, height))
         
         logs = []
         alerts = []
@@ -267,15 +270,11 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
         
         # Optimize output video for web streaming using ffmpeg if available
         import subprocess
-        temp_output = output_path + ".temp.mp4"
-        if os.path.exists(output_path):
+        if os.path.exists(temp_raw_path):
             try:
-                # Rename the OpenCV output to temp
-                os.rename(output_path, temp_output)
-                
-                # Re-encode to highly compatible web-ready H.264 format
+                # Re-encode from the raw mp4v file to highly compatible H.264 format
                 ffmpeg_cmd = [
-                    "ffmpeg", "-y", "-i", temp_output,
+                    "ffmpeg", "-y", "-i", temp_raw_path,
                     "-vcodec", "libx264",
                     "-pix_fmt", "yuv420p",
                     "-profile:v", "baseline", "-level", "3.0",
@@ -288,17 +287,17 @@ def run_real_yolo(input_path, output_path, conf_threshold, alert_classes, frame_
                 # Run conversion silently
                 subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 
-                # Remove temp file
-                if os.path.exists(temp_output):
-                    os.remove(temp_output)
+                # Remove temporary raw file
+                if os.path.exists(temp_raw_path):
+                    os.remove(temp_raw_path)
             except Exception as e:
-                print(f"[FFmpeg Warning] Web optimization failed: {e}", file=sys.stderr)
-                # Rollback temp output if needed
-                if os.path.exists(temp_output):
+                print(f"[FFmpeg Warning] Web optimization/transcoding failed: {e}", file=sys.stderr)
+                # Rollback: rename temp_raw_path to output_path so we have at least the raw video
+                if os.path.exists(temp_raw_path):
                     if os.path.exists(output_path):
                         try: os.remove(output_path)
                         except: pass
-                    os.rename(temp_output, output_path)
+                    os.rename(temp_raw_path, output_path)
         
         output_data = {
             "status": "success",
